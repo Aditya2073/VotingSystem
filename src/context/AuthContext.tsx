@@ -1,6 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { loginUser, registerUser } from '@/api/auth';
+import { initializeDefaultCandidates } from '@/api/candidates';
 
 // Define types
 type User = {
@@ -22,28 +24,6 @@ type AuthContextType = {
   isAuthenticated: boolean;
 };
 
-// Mock database for development
-const mockUsers = [
-  {
-    id: '1',
-    name: 'Admin User',
-    email: 'admin@example.com',
-    voterId: 'ADMIN123',
-    password: 'password123',
-    isAdmin: true,
-    hasVoted: false
-  },
-  {
-    id: '2',
-    name: 'Regular User',
-    email: 'user@example.com',
-    voterId: 'VOTER123',
-    password: 'password123',
-    isAdmin: false,
-    hasVoted: false
-  }
-];
-
 // Create context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -51,6 +31,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Initialize default candidates
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        await initializeDefaultCandidates();
+      } catch (err) {
+        console.error('Failed to initialize candidates:', err);
+      }
+    };
+    
+    initialize();
+  }, []);
 
   // Check for saved session on initial load
   useEffect(() => {
@@ -77,24 +70,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Find user in mock DB
-      const foundUser = mockUsers.find(u => u.email === email);
-      
-      if (!foundUser || foundUser.password !== password) {
-        throw new Error('Invalid credentials');
-      }
-      
-      // Remove password before setting to state/storage
-      const { password: _, ...safeUser } = foundUser;
+      const loggedInUser = await loginUser(email, password);
       
       // Save to localStorage
-      localStorage.setItem('user', JSON.stringify(safeUser));
+      localStorage.setItem('user', JSON.stringify(loggedInUser));
       
       // Update state
-      setUser(safeUser);
+      setUser(loggedInUser);
       toast.success('Login successful!');
       
     } catch (err: any) {
@@ -113,40 +95,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Check if user exists
-      if (mockUsers.some(u => u.email === email)) {
-        throw new Error('Email already in use');
-      }
-      
-      if (mockUsers.some(u => u.voterId === voterId)) {
-        throw new Error('Voter ID already registered');
-      }
-      
-      // Create new user
-      const newUser = {
-        id: (mockUsers.length + 1).toString(),
-        name,
-        email,
-        voterId,
-        password,
-        isAdmin: false,
-        hasVoted: false
-      };
-      
-      // Add to mock DB (in a real app this would be an API call)
-      mockUsers.push(newUser);
-      
-      // Remove password before setting to state/storage
-      const { password: _, ...safeUser } = newUser;
+      const newUser = await registerUser(name, email, voterId, password);
       
       // Update state
-      setUser(safeUser);
+      setUser(newUser);
       
       // Save to localStorage
-      localStorage.setItem('user', JSON.stringify(safeUser));
+      localStorage.setItem('user', JSON.stringify(newUser));
       
       toast.success('Registration successful!');
     } catch (err: any) {

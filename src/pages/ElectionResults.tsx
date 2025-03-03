@@ -1,4 +1,5 @@
 
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -22,67 +23,105 @@ import {
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Share2, Download, PrinterIcon } from "lucide-react";
+import { getElectionResults, getRegionalData } from "@/api/votes";
+import { toast } from "sonner";
+
+type CandidateResult = {
+  id: string;
+  name: string;
+  party: string;
+  votes: number;
+  percentage: number;
+  color?: string;
+  winner: boolean;
+};
+
+type RegionalData = {
+  region: string;
+  turnout: number;
+  winner: string;
+};
+
+type ElectionData = {
+  title: string;
+  status: string;
+  date: string;
+  totalVoters: number;
+  votesCast: number;
+  turnoutPercentage: number;
+  winningCandidate: string | null;
+  winningParty: string | null;
+};
 
 const ElectionResults = () => {
-  // Mock election result data
-  const electionData = {
+  const [electionData, setElectionData] = useState<ElectionData>({
     title: "General Election 2023",
-    status: "Completed",
-    date: "October 15, 2023",
-    totalVoters: 12500,
-    votesCast: 8750,
-    turnoutPercentage: 70,
-    winningCandidate: "Rajesh Kumar",
-    winningParty: "Party C",
-  };
+    status: "In Progress",
+    date: new Date().toLocaleDateString(),
+    totalVoters: 0,
+    votesCast: 0,
+    turnoutPercentage: 0,
+    winningCandidate: null,
+    winningParty: null,
+  });
 
-  // Mock candidate results
-  const candidateResults = [
-    {
-      name: "Rajesh Kumar",
-      party: "Party C",
-      votes: 2300,
-      percentage: 26.3,
-      color: "#138808", // Indian green
-      winner: true,
-    },
-    {
-      name: "Aditya Sharma",
-      party: "Party A",
-      votes: 2500,
-      percentage: 28.6,
-      color: "#1a365d", // Indian blue
-      winner: false,
-    },
-    {
-      name: "Priya Patel",
-      party: "Party B",
-      votes: 2100,
-      percentage: 24.0,
-      color: "#ff9933", // Indian orange
-      winner: false,
-    },
-    {
-      name: "Sunita Verma",
-      party: "Party D",
-      votes: 1850,
-      percentage: 21.1,
-      color: "#6b7280", // Gray
-      winner: false,
-    },
-  ];
+  const [candidateResults, setCandidateResults] = useState<CandidateResult[]>([]);
+  const [regionalData, setRegionalData] = useState<RegionalData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Define colors for candidates
+  const colors = ["#138808", "#1a365d", "#ff9933", "#6b7280"];
+
+  useEffect(() => {
+    const loadResults = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Get election results
+        const results = await getElectionResults();
+        
+        // Get regional data
+        const regions = await getRegionalData();
+        
+        // Set election data
+        setElectionData({
+          ...electionData,
+          status: results.totalVotes > 0 ? "Completed" : "In Progress",
+          votesCast: results.totalVotes,
+          turnoutPercentage: results.turnoutPercentage,
+          winningCandidate: results.winningCandidate,
+          winningParty: results.winningParty,
+        });
+        
+        // Assign colors to candidates
+        const candidatesWithColors = results.candidates.map((candidate, index) => ({
+          ...candidate,
+          color: colors[index % colors.length],
+        }));
+        
+        setCandidateResults(candidatesWithColors);
+        setRegionalData(regions);
+      } catch (error) {
+        console.error("Failed to load election results:", error);
+        toast.error("Failed to load election results");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadResults();
+  }, []);
 
   // Sort candidates by votes for display
   const sortedCandidates = [...candidateResults].sort((a, b) => b.votes - a.votes);
 
-  // Regional voting data for map visualization
-  const regionalData = [
-    { region: "North", turnout: 72, winner: "Rajesh Kumar" },
-    { region: "South", turnout: 68, winner: "Aditya Sharma" },
-    { region: "East", turnout: 65, winner: "Priya Patel" },
-    { region: "West", turnout: 75, winner: "Rajesh Kumar" },
-    { region: "Central", turnout: 70, winner: "Rajesh Kumar" },
-  ];
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8 px-4 text-center">
+        <h1 className="text-3xl font-bold mb-2">Loading Results...</h1>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -91,7 +130,11 @@ const ElectionResults = () => {
         <div className="flex justify-center items-center gap-2">
           <Badge
             variant="outline"
-            className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200"
+            className={`${
+              electionData.status === "Completed" 
+                ? "bg-green-100 text-green-800 hover:bg-green-100 border-green-200" 
+                : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200"
+            }`}
           >
             {electionData.status}
           </Badge>
@@ -108,7 +151,7 @@ const ElectionResults = () => {
             <CardTitle className="text-lg">Total Voters</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{electionData.totalVoters.toLocaleString()}</p>
+            <p className="text-3xl font-bold">{electionData.totalVoters > 0 ? electionData.totalVoters.toLocaleString() : "Calculating..."}</p>
           </CardContent>
         </Card>
         
@@ -135,8 +178,14 @@ const ElectionResults = () => {
             <CardTitle className="text-lg">Winning Candidate</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-bold">{electionData.winningCandidate}</p>
-            <p className="text-sm text-muted-foreground">{electionData.winningParty}</p>
+            {electionData.winningCandidate ? (
+              <>
+                <p className="text-xl font-bold">{electionData.winningCandidate}</p>
+                <p className="text-sm text-muted-foreground">{electionData.winningParty}</p>
+              </>
+            ) : (
+              <p className="text-lg">No votes cast yet</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -150,29 +199,35 @@ const ElectionResults = () => {
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sortedCandidates}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip 
-                    formatter={(value, name, props) => [
-                      `${value.toLocaleString()} votes`, 
-                      props.payload.party
-                    ]}
-                  />
-                  <Legend />
-                  <Bar 
-                    dataKey="votes" 
-                    name="Votes" 
-                    radius={[4, 4, 0, 0]}
-                  >
-                    {sortedCandidates.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {sortedCandidates.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={sortedCandidates}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip 
+                      formatter={(value, name, props) => [
+                        `${value.toLocaleString()} votes`, 
+                        props.payload.party
+                      ]}
+                    />
+                    <Legend />
+                    <Bar 
+                      dataKey="votes" 
+                      name="Votes" 
+                      radius={[4, 4, 0, 0]}
+                    >
+                      {sortedCandidates.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-lg text-gray-500">No votes cast yet</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -184,28 +239,34 @@ const ElectionResults = () => {
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={sortedCandidates}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="percentage"
-                  >
-                    {sortedCandidates.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value) => [`${value}%`]}
-                    labelFormatter={(index) => sortedCandidates[index].name}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+              {sortedCandidates.length > 0 && electionData.votesCast > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={sortedCandidates}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="percentage"
+                    >
+                      {sortedCandidates.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => [`${value}%`]}
+                      labelFormatter={(index) => sortedCandidates[index].name}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-lg text-gray-500">No votes cast yet</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -230,27 +291,33 @@ const ElectionResults = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedCandidates.map((candidate, index) => (
-                <tr 
-                  key={index} 
-                  className={`border-b ${candidate.winner ? 'bg-green-50' : ''}`}
-                >
-                  <td className="p-4 font-medium">{index + 1}</td>
-                  <td className="p-4">{candidate.name}</td>
-                  <td className="p-4">{candidate.party}</td>
-                  <td className="p-4 text-right">
-                    {candidate.votes.toLocaleString()}
-                  </td>
-                  <td className="p-4 text-right">{candidate.percentage}%</td>
-                  <td className="p-4 text-center">
-                    {candidate.winner ? (
-                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">
-                        Winner
-                      </Badge>
-                    ) : null}
-                  </td>
+              {sortedCandidates.length > 0 ? (
+                sortedCandidates.map((candidate, index) => (
+                  <tr 
+                    key={index} 
+                    className={`border-b ${candidate.winner ? 'bg-green-50' : ''}`}
+                  >
+                    <td className="p-4 font-medium">{index + 1}</td>
+                    <td className="p-4">{candidate.name}</td>
+                    <td className="p-4">{candidate.party}</td>
+                    <td className="p-4 text-right">
+                      {candidate.votes.toLocaleString()}
+                    </td>
+                    <td className="p-4 text-right">{candidate.percentage}%</td>
+                    <td className="p-4 text-center">
+                      {candidate.winner ? (
+                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">
+                          Winner
+                        </Badge>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="p-4 text-center text-gray-500">No votes cast yet</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

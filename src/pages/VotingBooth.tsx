@@ -1,46 +1,103 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { getCandidates } from "@/api/candidates";
+import { submitVote } from "@/api/votes";
+import { useAuth } from "@/context/AuthContext";
+
+type Candidate = {
+  _id: string;
+  id?: string;
+  name: string;
+  party: string;
+  photo: string;
+};
 
 const VotingBooth = () => {
-  const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock candidates data - in a real app, this would come from an API
-  const candidates = [
-    { id: "1", name: "Aditya Sharma", party: "Party A", photo: "/placeholder.svg" },
-    { id: "2", name: "Priya Patel", party: "Party B", photo: "/placeholder.svg" },
-    { id: "3", name: "Rajesh Kumar", party: "Party C", photo: "/placeholder.svg" },
-    { id: "4", name: "Sunita Verma", party: "Party D", photo: "/placeholder.svg" },
-  ];
+  useEffect(() => {
+    // Redirect if not logged in
+    if (!user) {
+      toast.error("You must be logged in to vote");
+      navigate("/login");
+      return;
+    }
 
-  const handleVote = () => {
+    // Redirect if already voted
+    if (user.hasVoted) {
+      toast.info("You have already cast your vote");
+      navigate("/results");
+      return;
+    }
+
+    // Load candidates
+    const loadCandidates = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getCandidates();
+        setCandidates(data);
+      } catch (error) {
+        console.error("Failed to load candidates:", error);
+        toast.error("Failed to load candidates");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCandidates();
+  }, [user, navigate]);
+
+  const handleVote = async () => {
     if (!selectedCandidate) {
-      toast({
-        title: "No selection made",
-        description: "Please select a candidate before submitting your vote.",
-        variant: "destructive",
-      });
+      toast.error("Please select a candidate before submitting your vote");
+      return;
+    }
+
+    if (!user) {
+      toast.error("You must be logged in to vote");
+      navigate("/login");
       return;
     }
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      toast({
-        title: "Vote Submitted Successfully!",
-        description: "Thank you for participating in the democratic process.",
-      });
-      setIsSubmitting(false);
+    try {
+      await submitVote(user.id, selectedCandidate);
+      
+      toast.success("Vote Submitted Successfully!");
+      
+      // Refresh user data by forcing a page reload
+      // In a real app, we would update the user context directly
+      localStorage.setItem('user', JSON.stringify({
+        ...user,
+        hasVoted: true
+      }));
+      
       navigate("/results");
-    }, 1500);
+    } catch (error: any) {
+      console.error("Voting error:", error);
+      toast.error(error.message || "Failed to submit vote");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8 px-4 text-center">
+        <h1 className="text-3xl font-bold mb-2">Loading Candidates...</h1>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -54,13 +111,13 @@ const VotingBooth = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {candidates.map((candidate) => (
           <Card
-            key={candidate.id}
+            key={candidate._id}
             className={`p-4 cursor-pointer transition-all ${
-              selectedCandidate === candidate.id
+              selectedCandidate === candidate._id
                 ? "ring-2 ring-indian-orange shadow-lg"
                 : "hover:shadow-md"
             }`}
-            onClick={() => setSelectedCandidate(candidate.id)}
+            onClick={() => setSelectedCandidate(candidate._id)}
           >
             <div className="flex flex-col items-center">
               <div className="w-32 h-32 rounded-full overflow-hidden mb-4 bg-muted">
@@ -73,7 +130,7 @@ const VotingBooth = () => {
               <h3 className="text-lg font-semibold">{candidate.name}</h3>
               <p className="text-sm text-muted-foreground">{candidate.party}</p>
               
-              {selectedCandidate === candidate.id && (
+              {selectedCandidate === candidate._id && (
                 <div className="mt-2 bg-indian-orange text-white px-2 py-1 rounded-full text-xs">
                   Selected
                 </div>
