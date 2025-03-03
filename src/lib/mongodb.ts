@@ -15,10 +15,12 @@ if (!MONGODB_URI) {
  * in development. This prevents connections growing exponentially
  * during API Route usage.
  */
-let cached = global.mongoose;
+let cached = { conn: null, promise: null };
 
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+// Initialize global mongoose in Node.js environment
+if (typeof window === 'undefined' && !global.mongoose) {
+  global.mongoose = { conn: null, promise: null };
+  cached = global.mongoose;
 }
 
 async function connectToDatabase() {

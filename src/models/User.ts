@@ -70,8 +70,18 @@ UserSchema.methods.matchPassword = async function (enteredPassword: string) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Check if model exists before creating it to prevent errors when Hot Module Reloading
-// This is the fix for the "Cannot read properties of undefined (reading 'User')" error
-const User = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+// Fix for browser environment: check if we're in a browser context
+const isClient = typeof window !== 'undefined';
+
+// Define a mock or real model based on environment
+let User;
+if (isClient) {
+  // In browser - create a mock model
+  // This prevents the "Cannot read properties of undefined (reading 'User')" error
+  User = { name: 'User' };
+} else {
+  // Server-side - use real Mongoose model
+  User = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+}
 
 export default User;
