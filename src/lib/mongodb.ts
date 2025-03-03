@@ -22,6 +22,13 @@ if (!cached) {
 }
 
 async function connectToDatabase() {
+  // When running in the browser, return a mock connection
+  // This prevents client-side connection attempts
+  if (typeof window !== 'undefined') {
+    console.log('Running in browser - skipping actual MongoDB connection');
+    return { connection: { isConnected: false } };
+  }
+
   if (cached.conn) {
     return cached.conn;
   }
